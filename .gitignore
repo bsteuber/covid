@@ -1,0 +1,5 @@
+/.nrepl-port
+/.shadow-cljs
+/node_modules
+/app/js/out/
+/suite/js/out/

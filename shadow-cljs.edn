@@ -1,0 +1,18 @@
+{:source-paths ["src" "test"]
+ :dependencies [[org.clojure/core.async "0.4.500"]
+                [reagent "0.8.1" :exclusions [cljsjs/react cljsjs/react-dom]]
+                [re-frame "0.10.7"]
+                [com.bhauman/cljs-test-display "0.1.1"]]
+ :dev-http {8000 "app"
+            8001 "suite"}
+ :builds       {:app  {:output-dir "app/js/out"
+                       :asset-path "js/out"
+                       :target     :browser
+                       :modules    {:app {:init-fn main.app/init}}
+                       :devtools   {:after-load main.app/on-reload}}
+
+                :test {:output-dir "suite/js/out"
+                       :asset-path "js/out"
+                       :target     :browser
+                       :modules    {:test {:init-fn main.tests/run}}
+                       :devtools   {:after-load main.tests/run}}}}
