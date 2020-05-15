@@ -3,7 +3,8 @@
                 [reagent "0.10.0" :exclusions [cljsjs/react cljsjs/react-dom]]
                 [re-frame "0.12.0"]
                 [me.flowthing/re-frame-utils "0.1.1"]
-                [com.bhauman/cljs-test-display "0.1.1"]]
+                [com.bhauman/cljs-test-display "0.1.1"]
+                [testdouble/clojurescript.csv "0.4.5"]]
  :dev-http     {8000 "app"
                 8001 "suite"}
  :builds       {:app {:output-dir "app/js/out"

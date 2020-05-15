@@ -4,9 +4,10 @@
             [goog.dom :as gdom]
             [reagent.dom :as rd]
             [re-frame.core :as rf]
+            [testdouble.cljs.csv :as csv]
             [vimsical.re-frame.cofx.inject :as inject]))
 
-(def csv-filename "https://datahub.io/core/covid-19/r/key-countries-pivoted.csv")
+  (def csv-filename "https://datahub.io/core/covid-19/r/time-series-19-covid-combined.csv")
 
 (rf/reg-event-db
  :set-data
@@ -14,11 +15,13 @@
    (assoc db :data data)))
 
 (defn parse-csv-data [data]
-  (let [lines           (->> (str/split data #"\n")
-                             (map #(str/split % #",")))
-        [_ & countries] (first lines)]
-    (reduce (fn [m [date & country-cases]]
-              (assoc m date (zipmap countries country-cases)))
+  (let [lines (csv/read-csv data)]
+    (reduce (fn [m [date country province lat long confirmed recovered deaths]]
+              (assoc-in m [date (str country
+                                     (when-not (empty? province)
+                                       (str " - " province)))]
+                        {:cases  confirmed
+                         :deaths deaths}))
             {}
             (rest lines))))
 
@@ -44,8 +47,6 @@
  :data
  (fn [db]
    (:data db)))
-
-
 
 (rf/reg-sub
  :past-days-str
@@ -74,7 +75,14 @@
    (->> data
         keys
         (sort >)
-        (take days))))
+        (take (+ days 8)))))
+
+(rf/reg-sub
+ :shown-dates
+ :<- [:dates]
+ :<- [:past-days]
+ (fn [[dates days] _]
+   (take days dates)))
 
 (rf/reg-sub
  :all-countries
@@ -130,20 +138,32 @@
  :<- [:past-days]
  (fn [[data dates days] [_ country]]
    (->> dates
-        (map #(get-in data [% country]))
-        (take days)
+        (map #(get-in data [% country :cases]))
+        (take (+ days 8))
         vec)))
 
 (rf/reg-sub-raw
- :recent-country-growth
+ :recent-new-cases
  (fn [_ [_ country]]
    (reaction
-    (let [days         @(rf/subscribe [:past-days])
-          country-data @(rf/subscribe [:recent-country-cases country (inc days)])]
+    (let [country-data @(rf/subscribe [:recent-country-cases country])]
       (->> country-data
            (partition 2 1)
            (map (fn [[current before]]
-                  (- (/ current before)
+                  (- current before)))
+           vec)))))
+
+(rf/reg-sub-raw
+ :recent-new-cases-growth
+ (fn [_ [_ country]]
+   (reaction
+    (let [country-data @(rf/subscribe [:recent-new-cases country])]
+      (prn (count country-data))
+      (->> country-data
+           (partition 7 1)
+           (map (fn [last-week]
+                  (- (/ (first last-week)
+                        (last last-week))
                      1)))
            vec)))))
 
@@ -151,12 +171,13 @@
  :by-country
  (fn [_ _]
    (reaction
-    (let [countries  @(rf/subscribe [:countries])]
+    (let [countries @(rf/subscribe [:countries])]
       (->> countries
            (map (fn [country]
                   [country
-                   {:cases  @(rf/subscribe [:recent-country-cases country])
-                    :growth @(rf/subscribe [:recent-country-growth country])}]))
+                   {:current-cases    @(rf/subscribe [:recent-country-cases country])
+                    :new-cases        @(rf/subscribe [:recent-new-cases country])
+                    :new-cases-growth @(rf/subscribe [:recent-new-cases-growth country])}]))
            (into {}))))))
 
 (defn checkbox [id label value event]
@@ -208,7 +229,7 @@
 
 (defn full-table []
   (let [countries  @(rf/subscribe [:countries])
-        dates      @(rf/subscribe [:dates])
+        dates      @(rf/subscribe [:shown-dates])
         by-country @(rf/subscribe [:by-country])]
     [:table.table
      [:thead
@@ -216,19 +237,21 @@
        [:th "Date"]
        (for [country countries]
          ^{:key country}
-         [:th {:colspan 2
-               :style left-border}
+         [:th {:colSpan 3
+               :style   left-border}
           country])]]
      [:tbody
-      [:tr.text-center
+      [:tr.text-right
        [:td]
        (for [country countries]
          ^{:key country}
          [:<>
           [:td {:style left-border}
-           "Cases"]
+           "Total Cases"]
           [:td
-           "Growth"]])]
+           "New Cases"]
+          [:td
+           "vs Last Week"]])]
       (for [[index date] (map-indexed list dates)]
         ^{:key date}
         [:tr.text-right
@@ -239,9 +262,11 @@
            ^{:key country}
            [:<>
             [:td {:style left-border}
-             (get-in by-country [country :cases index])]
+             (get-in by-country [country :current-cases index])]
             [:td
-             (format-percent (get-in by-country [country :growth index]))]])])]]))
+             (get-in by-country [country :new-cases index])]
+            [:td
+             (format-percent (get-in by-country [country :new-cases-growth index]))]])])]]))
 
 (defn main-component []
   [:div.container
