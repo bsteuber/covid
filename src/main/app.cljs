@@ -228,9 +228,12 @@
 (def left-border {:border-left "1px solid black"})
 
 (defn full-table []
-  (let [countries  @(rf/subscribe [:countries])
-        dates      @(rf/subscribe [:shown-dates])
-        by-country @(rf/subscribe [:by-country])]
+  (let [dates      @(rf/subscribe [:shown-dates])
+        by-country @(rf/subscribe [:by-country])
+        countries  (sort-by (fn [country]
+                              (get-in by-country [country :new-cases 0]))
+                            >
+                            @(rf/subscribe [:countries]))]
     [:table.table
      [:thead
       [:tr.text-center
